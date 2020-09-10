@@ -37,6 +37,7 @@ parser.add_argument('-p', '--ptrrecord', action="store", dest="ptrrecord", help=
 parser.add_argument('-s', '--srvrecord', action="store", dest="srvrecord", help="CSV file with SRV record data")
 parser.add_argument('--aaaa', action="store", dest="aaaarecord", help="CSV file with AAAA record data")
 parser.add_argument('--cname', action="store", dest="cnamerecord", help="CSV file with AAAA record data")
+parser.add_argument('--tags', action="store", dest="tags", help="Tags to apply to imported objects")
 parser.add_argument('-i', '--ipspace', action="store", dest="ipspace", help="Name of IP space to import data in", required=True)
 parser.add_argument('-c', '--config', action="store", dest="config", help="Path to ini file with API key", required=True)
 parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.3')
@@ -48,6 +49,13 @@ b1ddi = bloxone.b1ddi(options.config)
 # Get the IP space that we will import data in (Network View)
 ipspacePath = b1ddi.get_id('/ipam/ip_space', key="name", value=options.ipspace, include_path=True)
 print('The IP space used is ' + options.ipspace + ' with the following path: ' + ipspacePath)
+
+if options.tags:
+    tags = '"tags":' + options.tags
+else:
+    tags = '"tags":{""}'
+
+jsonTags = json.loads(json.dumps(tags))
 
 # Create and populate dictionary containing DHCP Option Codes
 optionDict = {}
@@ -141,7 +149,7 @@ def addcontainers(networkcontainers):
         cidr = item['netmask*']
         address = item['address*'] # Put network address in variable
         comment = item['comment']
-        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"comment":"' + comment + '"}')  # Create body for network creation
+        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"comment":"' + comment + '",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(json.dumps(body)) # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/ipam/address_block', body=jsonBody) # Create network using BloxOne API
         if response.status_code in b1ddi.return_codes_ok:
@@ -158,7 +166,7 @@ def addnetworks(networks):
         comment = item['comment']
         dhcphostID = getDhcphostid(item['dhcp_members']) # Get DHCP Host ID
         jsonDhcpoptions = getDhcpoptions(item) # Get DHCP Options in JSON
-        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"dhcp_host":"' + dhcphostID + '","comment":"' + comment + '","dhcp_options":' + jsonDhcpoptions + ',"inheritance_sources": {"dhcp_options": {"action":"override"}}}')  # Create body for network creation
+        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"dhcp_host":"' + dhcphostID + '","comment":"' + comment + '","dhcp_options":' + jsonDhcpoptions + ',"inheritance_sources": {"dhcp_options": {"action":"override"}},' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(json.dumps(body)) # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/ipam/subnet', body=jsonBody) # Create network using BloxOne API
         if response.status_code in b1ddi.return_codes_ok:
@@ -172,7 +180,7 @@ def addranges(ranges):
         start = item['start_address*']
         end = item['end_address*']
         comment = item['comment']
-        body = ('{"space":"' + ipspacePath + '","start":"' + start + '","end":"' + end + '","comment":"' + comment + '"}')  # Create body for network creation
+        body = ('{"space":"' + ipspacePath + '","start":"' + start + '","end":"' + end + '","comment":"' + comment + '",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(json.dumps(body)) # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/ipam/range', body=jsonBody) # Create network using BloxOne API
         if response.status_code in b1ddi.return_codes_ok:
@@ -189,7 +197,7 @@ def addfixed(fixed):
         match_value = item['mac_address']
         name = item['name']
         if match_type == 'RESERVED':
-            body = ('{"space":"' + ipspacePath + '","address":"' + address + '","comment":"' + comment + '"}')  # Create body for network creation
+            body = ('{"space":"' + ipspacePath + '","address":"' + address + '","comment":"' + comment + '",' + jsonTags + '}')  # Create body for network creation
             print(body)
             jsonBody = json.loads(json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
             response = b1ddi.create('/ipam/address', body=jsonBody)  # Create network using BloxOne API
@@ -199,7 +207,7 @@ def addfixed(fixed):
                 print(response.status_code)
                 print(response.text)
         elif match_type == 'MAC_ADDRESS':
-            body = ('{"ip_space":"' + ipspacePath + '","address":"' + address + '","match_type":"mac","match_value":"' + match_value +'","comment":"' + comment + '"}')  # Create body for network creation
+            body = ('{"ip_space":"' + ipspacePath + '","address":"' + address + '","match_type":"mac","match_value":"' + match_value +'","comment":"' + comment + '",' + jsonTags + '}')  # Create body for network creation
             print(body)
             jsonBody = json.loads(json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
             response = b1ddi.create('/dhcp/fixed_address', body=jsonBody)  # Create network using BloxOne API
@@ -215,7 +223,7 @@ def addzones(authzones):
         fqdn = item['fqdn*']
         comment = item['comment']
         view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
-        body = ('{"view":"' + view + '","fqdn":"' + fqdn + '","nsgs":["' + nsgroup + '"],"comment":"' + comment + '","primary_type":"cloud"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","fqdn":"' + fqdn + '","nsgs":["' + nsgroup + '"],"comment":"' + comment + '","primary_type":"cloud",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/auth_zone', body=jsonBody)  # Create network using BloxOne API
         if response.status_code in b1ddi.return_codes_ok:
@@ -230,7 +238,7 @@ def addarecord(arecord):
         fqdn = item['fqdn*']
         address = item['address*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"A"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"A",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -246,7 +254,7 @@ def addaaaarecord(aaaarecord):
         fqdn = item['fqdn*']
         address = item['address*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"AAAA"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"AAAA",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -262,7 +270,7 @@ def addtxtrecord(txtrecord):
         fqdn = item['fqdn*']
         text = item['text*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"text":"' + text + '"},"comment":"' + comment + '","type":"TXT"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"text":"' + text + '"},"comment":"' + comment + '","type":"TXT",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -281,7 +289,7 @@ def addsrvrecord(srvrecord):
         target = item['target*']
         weight = item['weight*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"port":' + port + ',"priority":' + priority + ',"target":"' + target + '","weight":' + weight +'},"comment":"' + comment + '","type":"SRV"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"port":' + port + ',"priority":' + priority + ',"target":"' + target + '","weight":' + weight +'},"comment":"' + comment + '","type":"SRV",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -298,7 +306,7 @@ def addmxrecord(mxrecord):
         exchange = item['mx*']
         preference = item['priority*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"exchange":"' + exchange + '","preference":' + preference + '},"comment":"' + comment + '","type":"MX"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"exchange":"' + exchange + '","preference":' + preference + '},"comment":"' + comment + '","type":"MX",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -314,7 +322,7 @@ def addcnamerecord(cnamerecord):
         fqdn = item['fqdn*']
         cname = item['canonical_name']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"cname":"' + cname + '"},"comment":"' + comment + '","type":"CNAME"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"cname":"' + cname + '"},"comment":"' + comment + '","type":"CNAME",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
@@ -330,7 +338,7 @@ def addptrrecord(ptrrecord):
         fqdn = item['fqdn']
         dname = item['dname*']
         comment = item['comment']
-        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"dname":"' + dname + '"},"comment":"' + comment + '","type":"PTR"}')  # Create body for network creation
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"dname":"' + dname + '"},"comment":"' + comment + '","type":"PTR",' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(
             json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
