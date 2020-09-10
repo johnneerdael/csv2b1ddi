@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """
+Version 0.6:
+- Added support for Authoritative zones and DNS objects, make sure DNS view in CSV has correct name
 Version 0.5:
 - Added support for fixed addresses, reservations and dhcp ranges
 Version 0.4:
@@ -15,7 +17,8 @@ ToDo:
 - Split global CSV and provide functions per object type
 - Add support for tags
 - Add support for Exclusion Ranges
-- Add support for DNS objects
+- Add support for Hosts
+- Add error checking
 """
 
 import csv, sys, bloxone, argparse, ipaddress, re, json
@@ -32,7 +35,8 @@ parser.add_argument('-t', '--txtrecord', action="store", dest="txtrecord", help=
 parser.add_argument('-m', '--mxrecord', action="store", dest="mxrecord", help="CSV file with MX record data")
 parser.add_argument('-p', '--ptrrecord', action="store", dest="ptrrecord", help="CSV file with PTR record data")
 parser.add_argument('-s', '--srvrecord', action="store", dest="srvrecord", help="CSV file with SRV record data")
-parser.add_argument('-q', '--aaaarecord', action="store", dest="aaaarecord", help="CSV file with AAAA record data")
+parser.add_argument('--aaaa', action="store", dest="aaaarecord", help="CSV file with AAAA record data")
+parser.add_argument('--cname', action="store", dest="cnamerecord", help="CSV file with AAAA record data")
 parser.add_argument('-i', '--ipspace', action="store", dest="ipspace", help="Name of IP space to import data in", required=True)
 parser.add_argument('-c', '--config', action="store", dest="config", help="Path to ini file with API key", required=True)
 parser.add_argument('-v', '--version', action='version', version='%(prog)s 0.3')
@@ -65,6 +69,16 @@ for item in jsonDhcphosts:
     id = item['id']
     dhcphostDict.update({name: id})
 
+def dnsserverDict():
+    dnsservers = {}
+    dnshosts = b1ddi.get('/dns/host', _fields='name,id')
+    jsonDnshosts = dnshosts.json()['results']
+    for item in jsonDnshosts:
+        name = item['name']
+        id = item['id']
+        dnsservers.update({name: id})
+    return dnsservers
+
 # Defition for DHCP Hosts and HA Groups to dictionary for lookup
 def dhcpserverDict():
     dhcpservers = {}
@@ -86,6 +100,13 @@ def getDhcphostid(name):
     except KeyError:
         dhcphostID = '' # If DHCP Host is not found, leave it empty
     return dhcphostID
+
+def getDnshostid(name):
+    try:
+        dnshostID = dnsservers[name] # Try to find a DHCP Host with name from CSV
+    except KeyError:
+        dnshostID = '' # If DHCP Host is not found, leave it empty
+    return dnshostID
 
 # Definition for importing CSV and saving it to a dictionary with key, value pairs
 def csv_dict_list(csvfile):
@@ -112,6 +133,7 @@ def getDhcpoptions(csvline):
     return jsonOptions
 
 dhcpservers = dhcpserverDict()
+dnsservers = dnsserverDict()
 
 # Import NIOS CSV for networkcontainers
 def addcontainers(networkcontainers):
@@ -187,6 +209,137 @@ def addfixed(fixed):
                 print(response.status_code)
                 print(response.text)
 
+def addzones(authzones):
+    for item in authzones:
+        nsgroup = b1ddi.get_id('/dns/auth_nsg',key="name",value=item['ns_group'],include_path=True)
+        fqdn = item['fqdn*']
+        comment = item['comment']
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        body = ('{"view":"' + view + '","fqdn":"' + fqdn + '","nsgs":["' + nsgroup + '"],"comment":"' + comment + '","primary_type":"cloud"}')  # Create body for network creation
+        jsonBody = json.loads(json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/auth_zone', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addarecord(arecord):
+    for item in arecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        address = item['address*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"A"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addaaaarecord(aaaarecord):
+    for item in aaaarecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        address = item['address*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"address":"' + address + '"},"comment":"' + comment + '","type":"AAAA"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addtxtrecord(txtrecord):
+    for item in txtrecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        text = item['text*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"text":"' + text + '"},"comment":"' + comment + '","type":"TXT"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addsrvrecord(srvrecord):
+    for item in srvrecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        port = item['port*']
+        priority = item['priority*']
+        target = item['target*']
+        weight = item['weight*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"port":' + port + ',"priority":' + priority + ',"target":"' + target + '","weight":' + weight +'},"comment":"' + comment + '","type":"SRV"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addmxrecord(mxrecord):
+    for item in mxrecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        exchange = item['mx*']
+        preference = item['priority*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"exchange":"' + exchange + '","preference":' + preference + '},"comment":"' + comment + '","type":"MX"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addcnamerecord(cnamerecord):
+    for item in cnamerecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn*']
+        cname = item['canonical_name']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"cname":"' + cname + '"},"comment":"' + comment + '","type":"CNAME"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
+def addptrrecord(ptrrecord):
+    for item in ptrrecord:
+        view = b1ddi.get_id('/dns/view', key="name",value=item['view'], include_path=True)
+        fqdn = item['fqdn']
+        dname = item['dname*']
+        comment = item['comment']
+        body = ('{"view":"' + view + '","absolute_name_spec":"' + fqdn + '","rdata":{"dname":"' + dname + '"},"comment":"' + comment + '","type":"PTR"}')  # Create body for network creation
+        jsonBody = json.loads(
+            json.dumps(body))  # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
+        response = b1ddi.create('/dns/record', body=jsonBody)  # Create network using BloxOne API
+        if response.status_code in b1ddi.return_codes_ok:
+            print(response.text)
+        else:
+            print(response.status_code)
+            print(response.text)
+
 def checkcsv():
     if options.networkcontainers is not None:
         networkcontainers = csv_dict_list(options.networkcontainers)
@@ -208,19 +361,22 @@ def checkcsv():
         addarecord(arecord)
     if options.txtrecord is not None:
         txtrecord = csv_dict_list(options.txtrecord)
-        addarecord(txtrecord)
+        addtxtrecord(txtrecord)
     if options.mxrecord is not None:
         mxrecord = csv_dict_list(options.mxrecord)
-        addarecord(mxrecord)
+        addmxrecord(mxrecord)
     if options.ptrrecord is not None:
         ptrrecord = csv_dict_list(options.ptrrecord)
         addptrrecord(ptrrecord)
     if options.srvrecord is not None:
         srvrecord = csv_dict_list(options.srvrecord)
-        addarecord(srvrecord)
+        addsrvrecord(srvrecord)
     if options.aaaarecord is not None:
         aaaarecord = csv_dict_list(options.aaaarecord)
-        addarecord(aaaarecord)
+        addaaaarecord(aaaarecord)
+    if options.cnamerecord is not None:
+        cnamerecord = csv_dict_list(options.cnamerecord)
+        addcnamerecord(cnamerecord)
     print('Finished processing all CSV files')
 
 checkcsv()
