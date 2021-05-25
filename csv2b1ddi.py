@@ -166,7 +166,7 @@ def addnetworks(networks):
         comment = item['comment']
         dhcphostID = getDhcphostid(item['dhcp_members']) # Get DHCP Host ID
         jsonDhcpoptions = getDhcpoptions(item) # Get DHCP Options in JSON
-        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"dhcp_host":"' + dhcphostID + '","comment":"' + comment + '","dhcp_options":' + jsonDhcpoptions + ',"inheritance_sources": {"dhcp_options": {"action":"override"}},' + jsonTags + '}')  # Create body for network creation
+        body = ('{"space":"' + ipspacePath + '","address":"' + address + '","cidr":' + cidr + ',"dhcp_host":"' + dhcphostID + '","comment":"' + comment + '","dhcp_options":' + jsonDhcpoptions + ',' + jsonTags + '}')  # Create body for network creation
         jsonBody = json.loads(json.dumps(body)) # Convert body to correct JSON and ensure quotes " are not escaped (ex. \")
         response = b1ddi.create('/ipam/subnet', body=jsonBody) # Create network using BloxOne API
         if response.status_code in b1ddi.return_codes_ok:
