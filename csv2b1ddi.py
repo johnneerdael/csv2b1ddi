@@ -128,7 +128,7 @@ def csv_dict_list(csvfile):
 def getDhcpoptions(csvline):
     dhcpoptions = {optionDict[15]: csvline['domain_name'], optionDict[6]: csvline['domain_name_servers'], optionDict[3]: csvline['routers']}  # Get DHCP options for values referenced by a name instead of OPTION-XX and save in dictionary
     for keys in csvline.keys():
-        if re.match('^OPTION-[1-255]', keys):  # Search for DHCP options in the format OPTION-XXX
+        if re.match('^OPTION-DHCP-(?<!\d)(?:[1-9]?\d|1\d\d|2(?:[0-4]\d|5[0-5]))(?!\d)', keys):  # Search for DHCP options in the format OPTION-XXX
             code = (re.findall('\d+', keys))  # Extract the DHCP option number
             codeInteger = int(code[0])  # Convert the DHCP option number to a integer value
             print(csvline[keys])
